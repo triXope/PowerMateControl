@@ -16,24 +16,53 @@ jobs:
       - name: Compile PowerMateControl.exe
         shell: pwsh
         run: |
-          $cppFiles = Get-ChildItem -Filter *.cpp -Recurse | ForEach-Object { $_.FullName }
-          if (-not $cppFiles) { throw "No .cpp files found in the repository." }
+          $cppFiles = @(Get-ChildItem -Filter *.cpp -Recurse | ForEach-Object { $_.FullName })
+          if ($cppFiles.Count -eq 0) { throw "No .cpp files found in the repository." }
 
-          $includeDirs = Get-ChildItem -Filter *.h -Recurse | Select-Object -ExpandProperty DirectoryName -Unique
-          $incFlags = $includeDirs | ForEach-Object { "-I`"$_`"" }
+          $includeDirs = @(Get-ChildItem -Filter *.h -Recurse | Select-Object -ExpandProperty DirectoryName -Unique)
 
-          $resObj = @()
+          $gppArgs = [System.Collections.Generic.List[string]]@(
+            "-std=c++17",
+            "-O2",
+            "-DUNICODE",
+            "-D_UNICODE",
+            "-include", "cstdint",
+            "-municode",
+            "-mwindows",
+            "-static",
+            "-static-libgcc",
+            "-static-libstdc++"
+          )
+
+          foreach ($dir in $includeDirs) {
+            $gppArgs.Add("-I$dir")
+          }
+
+          foreach ($cpp in $cppFiles) {
+            $gppArgs.Add($cpp)
+          }
+
           $rcFile = Get-ChildItem -Filter *.rc -Recurse | Select-Object -First 1
           if ($rcFile) {
-            windres $rcFile.FullName --include-dir "$($rcFile.DirectoryName)" -O coff -o resource.res
-            $resObj = @("resource.res")
+            windres $rcFile.FullName --include-dir $rcFile.DirectoryName -O coff -o resource.res
+            if ($LASTEXITCODE -ne 0) { throw "windres failed with exit code $LASTEXITCODE" }
+            $gppArgs.Add("resource.res")
           }
 
           New-Item -ItemType Directory -Force -Path build_out | Out-Null
-          g++ -std=c++17 -O2 -include cstdint -municode -mwindows -static -static-libgcc -static-libstdc++ `
-            @incFlags @cppFiles @resObj `
-            -lhid -lsetupapi -lshell32 -luser32 -lgdi32 -ladvapi32 `
-            -o build_out/PowerMateControl.exe
+          $gppArgs.AddRange([string[]]@(
+            "-lhid",
+            "-lsetupapi",
+            "-lshell32",
+            "-luser32",
+            "-lgdi32",
+            "-ladvapi32",
+            "-o",
+            "build_out/PowerMateControl.exe"
+          ))
+
+          & g++ $gppArgs
+          if ($LASTEXITCODE -ne 0) { throw "g++ failed with exit code $LASTEXITCODE" }
 
       - name: Upload PowerMateControl.exe
         uses: actions/upload-artifact@v4
