@@ -13,20 +13,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build Release x64 with MSBuild
+      - name: Compile PowerMateControl.exe
         shell: pwsh
         run: |
-          $sln = Get-ChildItem -Filter *.sln -Recurse | Select-Object -First 1
-          if (-not $sln) { throw "Could not find a .sln file in the repository." }
-          Write-Host "Building solution: $($sln.FullName)"
-          msbuild $sln.FullName /p:Configuration=Release /p:Platform=x64 /m
+          $cppFiles = Get-ChildItem -Filter *.cpp -Recurse | ForEach-Object { $_.FullName }
+          if (-not $cppFiles) { throw "No .cpp files found in the repository." }
+
+          $includeDirs = Get-ChildItem -Filter *.h -Recurse | Select-Object -ExpandProperty DirectoryName -Unique
+          $incFlags = $includeDirs | ForEach-Object { "-I`"$_`"" }
+
+          $resObj = @()
+          $rcFile = Get-ChildItem -Filter *.rc -Recurse | Select-Object -First 1
+          if ($rcFile) {
+            windres $rcFile.FullName --include-dir "$($rcFile.DirectoryName)" -O coff -o resource.res
+            $resObj = @("resource.res")
+          }
+
+          New-Item -ItemType Directory -Force -Path build_out | Out-Null
+          g++ -std=c++17 -O2 -include cstdint -municode -mwindows -static -static-libgcc -static-libstdc++ `
+            @incFlags @cppFiles @resObj `
+            -lhid -lsetupapi -lshell32 -luser32 -lgdi32 -ladvapi32 `
+            -o build_out/PowerMateControl.exe
 
       - name: Upload PowerMateControl.exe
         uses: actions/upload-artifact@v4
         with:
           name: PowerMateControl-x64-Release
-          path: "**/Release/*.exe"
+          path: build_out/PowerMateControl.exe
           if-no-files-found: error
