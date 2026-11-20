@@ -1,0 +1,32 @@
+name: Build PowerMateControl
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release x64 with MSBuild
+        shell: pwsh
+        run: |
+          $sln = Get-ChildItem -Filter *.sln -Recurse | Select-Object -First 1
+          if (-not $sln) { throw "Could not find a .sln file in the repository." }
+          Write-Host "Building solution: $($sln.FullName)"
+          msbuild $sln.FullName /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Upload PowerMateControl.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerMateControl-x64-Release
+          path: "**/Release/*.exe"
+          if-no-files-found: error
