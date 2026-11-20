@@ -2,7 +2,7 @@
 #include <iostream>
 
 // Initialize static variable
-size_t ProfileManager::currentProfileIndex = 0;
+size_t ProfileManager::currentProfileIndex = 1;
 
 // Static method: Return a reference to a static vector of profile names
 const std::vector<std::wstring>& ProfileManager::GetProfileList() {
